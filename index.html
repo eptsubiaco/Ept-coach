@@ -1098,8 +1098,8 @@ window._eptDoSetup = async function() {
     try {
       var _preCheck = await getDoc(doc(_fbDb, 'invites', _setupEmail));
       if (!_preCheck.exists()) {
-        var errEl = document.getElementById('setupError');
-        if (errEl) { errEl.style.display='block'; errEl.textContent='Access is by invitation only. Contact your gym administrator.'; }
+        var _invErrEl = document.getElementById('setupError');
+        if (_invErrEl) { _invErrEl.style.display='block'; _invErrEl.textContent='Access is by invitation only. Contact your gym administrator.'; }
         return;
       }
     } catch(_pce) {
