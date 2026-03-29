@@ -2064,7 +2064,8 @@ if ('serviceWorker' in navigator) {
         <div style="font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#666;padding:4px 8px 6px">TRANSFER BETWEEN DEVICES</div>
         <button onclick="exportToDrive();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(26,107,60,.2);border:1px solid rgba(26,107,60,.4);color:#5fe89a;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:5px">Export All Clients → JSON file</button>
         <button onclick="document.getElementById('jsonImportInput').click();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(26,60,107,.2);border:1px solid rgba(26,60,107,.4);color:#7eb8f7;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:5px">Import Clients — JSON</button>
-        <button onclick="_openBatchExcelImport();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);color:#c4a8ff;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:8px">Batch Import — Excel Programs</button>
+        <button onclick="_openBatchExcelImport();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);color:#c4a8ff;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:5px">Batch Import — Excel Files</button>
+        <button onclick="importFromGoogleDrive('batch');document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);color:#a78bfa;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:8px">Batch Import — Google Drive</button>
         <div style="font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#666;padding:4px 8px 6px">Bulk Actions</div>
         <button onclick="deleteAllExcept(prompt('Keep clients whose name contains:'))" style="width:100%;text-align:left;background:none;border:none;color:#ccc;font-family:Syne,sans-serif;font-size:11px;font-weight:600;padding:8px 10px;border-radius:4px;cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='none'">Delete all except...</button>
         <button onclick="keepLatestForAll()" style="width:100%;text-align:left;background:none;border:none;color:#ccc;font-family:Syne,sans-serif;font-size:11px;font-weight:600;padding:8px 10px;border-radius:4px;cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='none'">Trim all to latest microcycle only</button>
@@ -2469,6 +2470,7 @@ if ('serviceWorker' in navigator) {
     <span style="font-size:11px;color:var(--gn);font-weight:700">Import from Excel</span>
     <span style="font-size:10px;color:var(--mu);flex:1">Finds the latest phase (last sheet with data). Imports all exercises A&#8594;E with loads.</span>
     <button class="btn btnr" style="padding:5px 14px;font-size:10px" onclick="document.getElementById('excelPhaseInput').click()">Choose .xlsx File</button>
+    <button class="btn" style="padding:5px 14px;font-size:10px;background:#7c3aed;color:#fff" onclick="importFromGoogleDrive('single')">Browse Google Drive</button>
     <input type="file" id="excelPhaseInput" accept=".xlsx,.xls" style="display:none" onchange="importLatestPhaseFromExcel(this)"/>
   </div>
   <div style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--mu);margin-bottom:5px">Phase</div>
@@ -9385,6 +9387,10 @@ function _showBatchModal(){
     +'<div style="font-size:12px;font-weight:700;color:#c4a8ff;letter-spacing:1px">DROP EXCEL FILES HERE</div>'
     +'<div style="font-size:10px;color:#777;margin-top:4px">or click to browse — .xlsx files only</div>'
     +'</div>'
+    +'<div style="text-align:center;margin-bottom:16px">'
+    +'<span style="font-size:10px;color:#555;margin-right:8px">or</span>'
+    +'<button onclick="document.body.removeChild(document.getElementById(\'batchExcelModal\'));importFromGoogleDrive(\'batch\')" style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:8px 20px;border-radius:6px;background:rgba(124,58,237,.15);color:#c4a8ff;border:1px solid rgba(124,58,237,.4);cursor:pointer">Browse Google Drive Instead</button>'
+    +'</div>'
     +'<input type="file" id="batchFileInput" accept=".xlsx,.xls" multiple style="display:none" onchange="_batchFilesAdded(this.files);this.value=\'\'">'
     +'<div id="batchFileList" style="margin-bottom:16px"></div>'
     +'<div id="batchActions" style="display:none;text-align:center">'
@@ -9660,7 +9666,7 @@ function _showBatchResults(results,success,skipped,failed){
 // Google OAuth config — uses a public client ID for Drive access
 // The user will be asked to authorise on first use
 const GDRIVE_CLIENT_ID = ''; // Set by user — see instructions in modal
-const GDRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const GDRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 const GDRIVE_FILE_NAME = 'EPT-Coach-Clients.json';
 let _gdriveToken = null;
 let _gdriveFileId = null; // cached file ID once found/created
@@ -9806,6 +9812,307 @@ function _gdriveUpload(){
     doUpload(existing?existing.id:null);
   })
   .catch(()=>doUpload(null));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GOOGLE DRIVE PICKER — Browse Drive, pick Excel, import directly
+// ═══════════════════════════════════════════════════════════════
+
+var _drivePickerMode='single'; // 'single' = into current client, 'batch' = multi-select into batch
+var _drivePickerLoaded=false;
+
+function importFromGoogleDrive(mode){
+  _drivePickerMode=mode||'single';
+  var clientId=localStorage.getItem('ept_gdrive_client_id')||'';
+  if(!clientId){
+    // Show setup prompt
+    _showDrivePickerSetup();
+    return;
+  }
+  if(_gdriveToken){
+    _loadPickerApi(clientId);
+  } else {
+    // Need to auth first
+    _ensureGsiLoaded(clientId, function(){
+      _requestDrivePickerToken(clientId, function(){
+        _loadPickerApi(clientId);
+      });
+    });
+  }
+}
+
+function _showDrivePickerSetup(){
+  var existing=document.getElementById('drivePickerSetupModal');
+  if(existing){existing.style.display='flex';return;}
+
+  var ov=document.createElement('div');
+  ov.id='drivePickerSetupModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;font-family:Syne,sans-serif';
+  ov.onclick=function(e){if(e.target===ov)ov.style.display='none';};
+
+  var box=document.createElement('div');
+  box.style.cssText='background:#1e1e1e;border-radius:12px;max-width:500px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden';
+
+  box.innerHTML=
+    '<div style="background:#111;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:20px;letter-spacing:3px;color:#fff">Connect Google Drive</div>'
+    +'<button onclick="document.getElementById(\'drivePickerSetupModal\').style.display=\'none\'" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer">&times;</button>'
+    +'</div>'
+    +'<div style="padding:20px">'
+    +'<div style="font-size:11px;color:#aaa;line-height:1.7;margin-bottom:16px">One-time setup to browse your Google Drive directly from EPT Studio. Takes 2 minutes.</div>'
+    +'<div style="background:#252525;border:1px solid #333;border-radius:8px;padding:14px;margin-bottom:16px;font-size:11px;color:#ccc;line-height:1.8">'
+    +'1. Go to <a href="https://console.cloud.google.com/apis/credentials?project=ept-studio" target="_blank" style="color:#7c3aed">Google Cloud Console → Credentials</a><br>'
+    +'2. Click <strong style="color:#fff">+ Create Credentials → OAuth Client ID</strong><br>'
+    +'3. Application type: <strong style="color:#fff">Web Application</strong><br>'
+    +'4. Add Authorised JavaScript origin: <strong style="color:#5fe89a">https://eptsubiaco.github.io</strong><br>'
+    +'5. Copy the Client ID and paste below<br>'
+    +'<span style="font-size:10px;color:#888">(Also enable <strong>Google Drive API</strong> + <strong>Google Picker API</strong> under APIs & Services → Library)</span>'
+    +'</div>'
+    +'<input id="drivePickerClientId" placeholder="123456789-abc...apps.googleusercontent.com" style="width:100%;background:#252525;border:1px solid #444;border-radius:6px;color:#eee;font-size:11px;padding:10px 12px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box;margin-bottom:12px" value="'+(localStorage.getItem('ept_gdrive_client_id')||'')+'">'
+    +'<button onclick="_saveDrivePickerSetup()" style="width:100%;font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:12px;border-radius:6px;background:#7c3aed;color:#fff;border:none;cursor:pointer">Connect & Browse Drive</button>'
+    +'</div>';
+
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
+function _saveDrivePickerSetup(){
+  var input=document.getElementById('drivePickerClientId');
+  var clientId=input?input.value.trim():'';
+  if(!clientId){showDriveToast('Paste your OAuth Client ID first',false);return;}
+  localStorage.setItem('ept_gdrive_client_id',clientId);
+  var modal=document.getElementById('drivePickerSetupModal');
+  if(modal) modal.style.display='none';
+  importFromGoogleDrive(_drivePickerMode);
+}
+
+function _ensureGsiLoaded(clientId,callback){
+  if(window.google&&google.accounts&&google.accounts.oauth2){callback();return;}
+  if(!document.getElementById('gsiScript')){
+    var s=document.createElement('script');
+    s.id='gsiScript';
+    s.src='https://accounts.google.com/gsi/client';
+    s.onload=callback;
+    s.onerror=function(){showDriveToast('Could not load Google auth',false);};
+    document.head.appendChild(s);
+  } else {
+    callback();
+  }
+}
+
+function _requestDrivePickerToken(clientId,callback){
+  try{
+    var client=google.accounts.oauth2.initTokenClient({
+      client_id:clientId,
+      scope:GDRIVE_SCOPES,
+      callback:function(resp){
+        if(resp.error){showDriveToast('Drive auth failed: '+resp.error,false);return;}
+        _gdriveToken=resp.access_token;
+        callback();
+      }
+    });
+    client.requestAccessToken();
+  }catch(err){
+    showDriveToast('Auth error: '+err.message,false);
+  }
+}
+
+function _loadPickerApi(clientId){
+  if(_drivePickerLoaded){_createPicker(clientId);return;}
+  var s=document.createElement('script');
+  s.src='https://apis.google.com/js/api.js';
+  s.onload=function(){
+    gapi.load('picker',function(){
+      _drivePickerLoaded=true;
+      _createPicker(clientId);
+    });
+  };
+  s.onerror=function(){showDriveToast('Could not load Google Picker',false);};
+  document.head.appendChild(s);
+}
+
+function _createPicker(clientId){
+  // Extract API key from Firebase config (same project)
+  var apiKey=firebaseConfig.apiKey||'';
+
+  var view=new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
+  view.setMimeTypes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel');
+  view.setMode(google.picker.DocsViewMode.LIST);
+
+  // Also show a "my drive" folder view for browsing
+  var folderView=new google.picker.DocsView();
+  folderView.setIncludeFolders(true);
+  folderView.setSelectFolderEnabled(false);
+  folderView.setMimeTypes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel');
+
+  var builder=new google.picker.PickerBuilder()
+    .setTitle('Select Excel Program File'+ (_drivePickerMode==='batch'?' (s)':''))
+    .addView(view)
+    .addView(folderView)
+    .setOAuthToken(_gdriveToken)
+    .setCallback(_drivePickerCallback)
+    .setMaxItems(_drivePickerMode==='batch'?50:1);
+
+  if(apiKey) builder.setDeveloperKey(apiKey);
+
+  if(_drivePickerMode==='batch'){
+    builder.enableFeature(google.picker.Feature.MULTISELECT_ENABLED);
+  }
+
+  builder.build().setVisible(true);
+}
+
+function _drivePickerCallback(data){
+  if(data.action!==google.picker.Action.PICKED) return;
+  var docs=data.docs||[];
+  if(!docs.length) return;
+
+  if(_drivePickerMode==='batch'){
+    _driveBatchImportFiles(docs);
+  } else {
+    _driveSingleImportFile(docs[0]);
+  }
+}
+
+function _driveSingleImportFile(doc){
+  showDriveToast('Downloading '+doc.name+'...',true);
+  _downloadDriveFile(doc.id, function(arrayBuffer){
+    try{
+      if(typeof XLSX==='undefined'){showDriveToast('Excel library not loaded',false);return;}
+      var wb=XLSX.read(new Uint8Array(arrayBuffer),{type:'array'});
+      var result=_parseLatestPhase(wb);
+      if(!result){showDriveToast('No exercise data found in '+doc.name,false);return;}
+      _applyLatestPhase(result);
+    }catch(err){
+      showDriveToast('Import failed: '+err.message,false);
+    }
+  });
+}
+
+function _driveBatchImportFiles(docs){
+  // Close batch modal if open
+  var batchModal=document.getElementById('batchExcelModal');
+
+  var total=docs.length, done=0, success=0, failed=0, skipped=0;
+  var results=[];
+
+  showDriveToast('Downloading '+total+' files from Drive...',true);
+
+  // Ensure XLSX is loaded
+  if(typeof XLSX==='undefined'){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=function(){_processDriveBatch(docs,results,total);};
+    s.onerror=function(){showDriveToast('Could not load Excel library',false);};
+    document.head.appendChild(s);
+  } else {
+    _processDriveBatch(docs,results,total);
+  }
+}
+
+function _processDriveBatch(docs,results,total){
+  var idx=0;
+  function next(){
+    if(idx>=docs.length){
+      // All done — save
+      try{safeLocalStorageSet('ept_v6',JSON.stringify(savedClients));}catch(e){}
+      if(typeof buildStrip==='function')buildStrip();
+      if(typeof buildRosterGrid==='function')buildRosterGrid('');
+
+      var success=results.filter(function(r){return r.status==='ok';}).length;
+      var skipped=results.filter(function(r){return r.status==='skip';}).length;
+      var failed=results.filter(function(r){return r.status==='fail';}).length;
+
+      // Show summary in a batch results modal
+      _showDriveBatchResults(results,success,skipped,failed);
+      return;
+    }
+
+    var doc=docs[idx];
+    idx++;
+
+    _downloadDriveFile(doc.id, function(arrayBuffer){
+      var result={file:doc.name,status:'',client:'',details:''};
+      try{
+        var wb=XLSX.read(new Uint8Array(arrayBuffer),{type:'array'});
+        var parsed=_parseLatestPhase(wb);
+        if(!parsed){result.status='skip';result.details='No exercise data found';results.push(result);next();return;}
+
+        var guessName=_guessClientFromFilename(doc.name);
+        var client=_fuzzyMatchClient(guessName);
+        if(!client&&parsed.clientName) client=_fuzzyMatchClient(parsed.clientName);
+
+        if(!client){result.status='skip';result.details='No matching client for "'+(guessName||parsed.clientName||'?')+'"';results.push(result);next();return;}
+
+        result.client=client.name;
+        _applyBatchToClient(client,parsed);
+        result.status='ok';
+        result.details=parsed.totalExercises+' exercises, '+parsed.days.length+' day(s) from "'+parsed.sheetName+'"';
+      }catch(err){
+        result.status='fail';result.details=err.message;
+      }
+      results.push(result);
+      showDriveToast('Imported '+idx+'/'+total+'...',true);
+      next();
+    }, function(err){
+      results.push({file:doc.name,status:'fail',client:'',details:'Download failed'});
+      next();
+    });
+  }
+  next();
+}
+
+function _showDriveBatchResults(results,success,skipped,failed){
+  var old=document.getElementById('driveBatchResultsModal');
+  if(old) document.body.removeChild(old);
+
+  var ov=document.createElement('div');
+  ov.id='driveBatchResultsModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;font-family:Syne,sans-serif';
+  ov.onclick=function(e){if(e.target===ov)document.body.removeChild(ov);};
+
+  var box=document.createElement('div');
+  box.style.cssText='background:#1e1e1e;border-radius:12px;max-width:560px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.5);padding:24px';
+
+  var html='<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:3px;color:#fff;margin-bottom:16px">DRIVE IMPORT COMPLETE</div>';
+  html+='<div style="padding:12px 16px;border-radius:8px;margin-bottom:16px;'
+    +(failed>0?'background:rgba(201,39,31,.15);border:1px solid rgba(201,39,31,.3)'
+    :'background:rgba(26,107,60,.15);border:1px solid rgba(26,107,60,.3)')
+    +'"><div style="font-size:12px;color:#ccc">'
+    +'<span style="color:#5fe89a;font-weight:700">'+success+' imported</span>'
+    +(skipped?' · <span style="color:#ffb74d">'+skipped+' skipped</span>':'')
+    +(failed?' · <span style="color:#ff6b63">'+failed+' failed</span>':'')
+    +'</div></div>';
+
+  results.forEach(function(r){
+    var col=r.status==='ok'?'#5fe89a':r.status==='skip'?'#ffb74d':'#ff6b63';
+    var icon=r.status==='ok'?'✓':r.status==='skip'?'—':'✗';
+    html+='<div style="display:flex;gap:8px;padding:6px 4px;border-bottom:1px solid #333;font-size:10px">'
+      +'<span style="color:'+col+';font-weight:700">'+icon+'</span>'
+      +'<div><div style="color:#eee">'+r.file+(r.client?' → <strong style="color:#c4a8ff">'+r.client+'</strong>':'')+'</div>'
+      +'<div style="color:#888">'+r.details+'</div></div></div>';
+  });
+
+  html+='<div style="text-align:center;margin-top:16px"><button onclick="document.body.removeChild(document.getElementById(\'driveBatchResultsModal\'))" style="font-family:Syne,sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:10px 28px;border-radius:6px;background:#7c3aed;color:#fff;border:none;cursor:pointer">DONE</button></div>';
+
+  box.innerHTML=html;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
+function _downloadDriveFile(fileId,onSuccess,onError){
+  fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{
+    headers:{'Authorization':'Bearer '+_gdriveToken}
+  })
+  .then(function(r){
+    if(!r.ok) throw new Error('Download failed ('+r.status+')');
+    return r.arrayBuffer();
+  })
+  .then(onSuccess)
+  .catch(function(err){
+    if(onError) onError(err);
+    else showDriveToast('Download failed: '+err.message,false);
+  });
 }
 
 // ═══ INIT ═══
@@ -13828,7 +14135,7 @@ function saveProgressiveReport(){
 // ════════════════════════════════════════════════════════════════════
 function openTrainerPortal(){
   document.getElementById('trainerPortalOverlay').classList.add('vis');
-  buildReadinessForm();updateStrengthRef();buildCoachRef();
+  buildReadinessForm();buildCoachRef();
 }
 function closeTrainerPortal(){
   document.getElementById('trainerPortalOverlay').classList.remove('vis');
@@ -14771,64 +15078,6 @@ function calcBodyComp(){
 }
 
 // ────────────────────────────────────────────────────────────────
-// STRENGTH REFERENCE TABLE
-// ────────────────────────────────────────────────────────────────
-var SR_STANDARDS={
-  // [bw multipliers] as [beginner, intermediate, advanced, elite]
-  // Beginner  = 0-1yr  (learning patterns, sub-bodyweight strength)
-  // Intermediate = 1-3yr (consistent training, bodyweight+ lifts)
-  // Advanced  = 3-5yr  (competitive hobbyist, meaningful load)
-  // Elite     = 5yr+   (competitive athlete, peak expression)
-  'Back Squat':          [0.65, 1.0, 1.5, 2.0],
-  'Front Squat':         [0.45, 0.75, 1.15, 1.55],
-  'Trap Bar Deadlift':   [0.75, 1.15, 1.65, 2.2],
-  'Conventional DL':     [0.8,  1.25, 1.75, 2.3],
-  'Flat Bench Press':    [0.4,  0.7,  1.05, 1.4],
-  'Incline Bench Press': [0.35, 0.6,  0.9,  1.2],
-  'Overhead Press':      [0.25, 0.45, 0.65, 0.9],
-  'Weighted Chin-up':    [0.0,  0.15, 0.35, 0.6],
-  'Barbell Row':         [0.4,  0.65, 1.0,  1.3],
-  'Romanian DL':         [0.55, 0.9,  1.35, 1.75],
-  'Hip Thrust':          [0.75, 1.15, 1.65, 2.1],
-};
-var SR_LEVEL_IDX={Beginner:0,Intermediate:1,Advanced:2,Elite:3};
-
-function updateStrengthRef(){
-  // Pre-fill BW from client's latest weight log or benchmark
-  var _srBwEl=document.getElementById('sr-bw');
-  if(_srBwEl&&(!_srBwEl.value||_srBwEl.value==='80')){
-    var _srClName=(document.getElementById('cName')||{}).value||'';
-    var _srCl=_srClName?savedClients.find(function(x){return x.name.toLowerCase()===_srClName.toLowerCase();}):null;
-    if(_srCl){
-      var _srWts=(_srCl.weightLog||[]).filter(function(e){return e.weight;});
-      var _srBw=_srWts.length?_srWts[_srWts.length-1].weight:null;
-      if(!_srBw&&_srCl.intake&&_srCl.intake['iq-weight'])_srBw=parseFloat(_srCl.intake['iq-weight'])||null;
-      if(_srBw)_srBwEl.value=_srBw;
-    }
-  }
-  var bw=parseFloat(document.getElementById('sr-bw').value)||80;
-  var level=document.getElementById('sr-level').value;
-  var idx=SR_LEVEL_IDX[level]!==undefined?SR_LEVEL_IDX[level]:1;
-  var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:Syne,sans-serif;font-size:11px">';
-  html+='<thead><tr style="background:var(--s2);border-bottom:1px solid #2a2a2a">';
-  html+='<th style="text-align:left;padding:10px 12px;color:#666;font-size:9px;letter-spacing:2px;text-transform:uppercase">Exercise</th>';
-  html+='<th style="text-align:right;padding:10px 12px;color:#666;font-size:9px;letter-spacing:2px;text-transform:uppercase">Target ('+level+')</th>';
-  html+='<th style="text-align:right;padding:10px 12px;color:#666;font-size:9px;letter-spacing:2px;text-transform:uppercase">Bw ×</th>';
-  html+='</tr></thead><tbody>';
-  Object.keys(SR_STANDARDS).forEach(function(ex,i){
-    var mult=SR_STANDARDS[ex][idx];
-    var target=Math.round(bw*mult);
-    html+='<tr style="border-bottom:1px solid #111;background:'+(i%2?'transparent':'rgba(255,255,255,.02)')+'">'+
-      '<td style="padding:10px 12px;color:#ccc;font-weight:600">'+ex+'</td>'+
-      '<td style="padding:10px 12px;color:#fff;font-weight:800;text-align:right">'+target+' kg</td>'+
-      '<td style="padding:10px 12px;color:#555;text-align:right">×'+mult+'</td>'+
-    '</tr>';
-  });
-  html+='</tbody></table></div>';
-  html+='<div style="font-size:10px;color:#444;margin-top:8px;font-style:italic">Based on EPT strength standards. 1RM estimates. Adjust for training age and movement pattern familiarity.</div>';
-  document.getElementById('sr-table').innerHTML=html;
-}
-
 // ────────────────────────────────────────────────────────────────
 // COACH REFERENCE LIBRARY
 // ────────────────────────────────────────────────────────────────
@@ -19848,7 +20097,6 @@ function renderBioSigTrendChart(cl){
       <button class="tp-tab active" onclick="tpSwitch('injAssess')">Injury Assessment</button>
       <button class="tp-tab" onclick="tpSwitch('loadReadiness')">Load Readiness</button>
       <button class="tp-tab" onclick="tpSwitch('loadCalc')">Load Calculator</button>
-      <button class="tp-tab" onclick="tpSwitch('strengthRef')">Strength Reference</button>
       <button class="tp-tab" onclick="tpSwitch('coachRef')">Coach Reference</button>
     </div>
 
@@ -19959,20 +20207,7 @@ function renderBioSigTrendChart(cl){
       </div>
     </div>
 
-    <!-- ══ PANEL 5: STRENGTH REF ════════════════════════════════ -->
-    <div class="tp-panel" id="tp-strengthRef">
-      <div class="tp-sec">EPT Strength Standards Reference</div>
-      <div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap">
-        <div class="fg"><label class="fl" style="color:#888">BW (kg)</label><input class="fi" id="sr-bw" type="number" placeholder="80" oninput="updateStrengthRef()" style="width:90px"/></div>
-        <div class="fg"><label class="fl" style="color:#888">Level</label>
-          <select class="fse" id="sr-level" onchange="updateStrengthRef()" style="width:140px">
-            <option>Beginner</option><option selected>Intermediate</option><option>Advanced</option><option>Elite</option>
-          </select></div>
-      </div>
-      <div id="sr-table"></div>
-    </div>
-
-    <!-- ══ PANEL 6: COACH REFERENCE ════════════════════════════ -->
+    <!-- ══ PANEL 5: COACH REFERENCE ════════════════════════════ -->
     <div class="tp-panel" id="tp-coachRef">
       <div class="tp-sec">Coach Reference Library</div>
       <div class="tool-grid" id="coachRefGrid"></div>
