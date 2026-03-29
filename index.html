@@ -1031,6 +1031,10 @@ try {
 
 // ---- Expose to global scope for v6.2 code ----
 window._fb = { db: _fbDb, auth: _fbAuth, storage: _fbStorage, ready: _firebaseReady };
+window._fbDb = _fbDb;
+window._fbAuth = _fbAuth;
+window._fbStorage = _fbStorage;
+window._firebaseReady = _firebaseReady;
 window._gymId = null;
 
 // ============================================================
