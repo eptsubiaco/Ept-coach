@@ -1137,7 +1137,12 @@ if (_firebaseReady) {
         }
       } catch(e) {
         console.error('[EPT] Auth state error:', e);
-        alert('Login error: ' + e.message + '. Try the legacy password mode.');
+        // Reset the sign-in button so user isn't stuck
+        var _loginBtn = document.getElementById('authLoginBtn');
+        if (_loginBtn) _loginBtn.textContent = 'SIGN IN';
+        var _errEl = document.getElementById('authError');
+        if (_errEl) { _errEl.style.display='block'; _errEl.textContent='Login error: ' + e.message; }
+        alert('Login error: ' + e.message);
       }
     }
   });
@@ -1503,7 +1508,12 @@ function _startSync() {
 //  Shows: their program, session history, progress, coach notes
 // ============================================================
 
+var _portalUnsub = null; // track portal onSnapshot listener
+
 async function _launchClientPortal(user, staff) {
+  // Unsubscribe any existing portal listener to prevent stacking
+  if (_portalUnsub) { try { _portalUnsub(); } catch(e){} _portalUnsub = null; }
+
   var clientId = staff.linkedClientId;
   if (!clientId) {
     document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Syne,sans-serif;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">&#128274;</div><div style="font-size:18px;font-weight:700;color:#1a1714;margin-bottom:8px">Portal Not Linked</div><div style="font-size:13px;color:#888;max-width:400px;line-height:1.6">Your account hasn\'t been linked to a client record yet. Ask your coach to link your account in Team Management.</div><button onclick="window._eptSignOut()" style="margin-top:20px;background:#C9271F;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">SIGN OUT</button></div></div>';
@@ -1698,7 +1708,7 @@ async function _launchClientPortal(user, staff) {
   document.body.appendChild(container);
 
   // ---- Real-time listener for this specific client doc (auto-refresh portal) ----
-  onSnapshot(doc(_fbDb, 'gyms', _gymId, 'clients', clientId), function(snap) {
+  _portalUnsub = onSnapshot(doc(_fbDb, 'gyms', _gymId, 'clients', clientId), function(snap) {
     if (snap.exists()) {
       console.log('[EPT Portal] Client data updated — refreshing');
       // Re-launch portal with fresh data
@@ -1735,10 +1745,15 @@ function _patchTopbar(user, staff) {
 }
 
 window._eptSignOut = async function() {
-  if (_unsubClients) _unsubClients();
-  if (_fbAuth) await signOut(_fbAuth);
-  sessionStorage.removeItem('ept_auth');
-  window._legacyMode = false;
+  try {
+    if (_portalUnsub) { try { _portalUnsub(); } catch(e){} _portalUnsub = null; }
+    if (_unsubClients) { try { _unsubClients(); } catch(e){} }
+    if (_fbAuth) await signOut(_fbAuth);
+    sessionStorage.removeItem('ept_auth');
+    window._legacyMode = false;
+  } catch(e) {
+    console.error('[EPT] Sign-out error:', e);
+  }
   location.reload();
 };
 
@@ -2048,7 +2063,8 @@ if ('serviceWorker' in navigator) {
       <div id="manageMenu" style="display:none;position:absolute;top:56px;right:28px;background:#2a2a2a;border:1px solid #444;border-radius:8px;padding:8px;min-width:240px;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,.5)">
         <div style="font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#666;padding:4px 8px 6px">TRANSFER BETWEEN DEVICES</div>
         <button onclick="exportToDrive();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(26,107,60,.2);border:1px solid rgba(26,107,60,.4);color:#5fe89a;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:5px">Export All Clients → JSON file</button>
-        <button onclick="document.getElementById('jsonImportInput').click();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(26,60,107,.2);border:1px solid rgba(26,60,107,.4);color:#7eb8f7;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:8px">Import Clients — JSON</button>
+        <button onclick="document.getElementById('jsonImportInput').click();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(26,60,107,.2);border:1px solid rgba(26,60,107,.4);color:#7eb8f7;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:5px">Import Clients — JSON</button>
+        <button onclick="_openBatchExcelImport();document.getElementById('manageMenu').style.display='none'" style="width:100%;text-align:left;background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);color:#c4a8ff;font-family:Syne,sans-serif;font-size:12px;font-weight:700;padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:8px">Batch Import — Excel Programs</button>
         <div style="font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#666;padding:4px 8px 6px">Bulk Actions</div>
         <button onclick="deleteAllExcept(prompt('Keep clients whose name contains:'))" style="width:100%;text-align:left;background:none;border:none;color:#ccc;font-family:Syne,sans-serif;font-size:11px;font-weight:600;padding:8px 10px;border-radius:4px;cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='none'">Delete all except...</button>
         <button onclick="keepLatestForAll()" style="width:100%;text-align:left;background:none;border:none;color:#ccc;font-family:Syne,sans-serif;font-size:11px;font-weight:600;padding:8px 10px;border-radius:4px;cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,.08)'" onmouseout="this.style.background='none'">Trim all to latest microcycle only</button>
@@ -2365,6 +2381,7 @@ if ('serviceWorker' in navigator) {
           <option value="triphasic_strength">[ADV] Athletic — Triphasic Ecc → Iso → Con (12 wk)</option>
           <option value="erana_neural_peak">[ADV] Neural Peak — Strength Arc 5,5,3,3,1 (12 wk)</option>
           <option value="abi_wave_cluster">Wave + Cluster — Abi Golf 7,5,3 + 3/1/1/1 (12 wk)</option>
+          <option value="cluster_set_method">Cluster Sets — 10/8/6 Intra-Set Rest (12 wk)</option>
           <option value="sheiko_powerlifting">Sheiko — Powerlifting Periodisation (16 wk)</option>
         </optgroup>
 
@@ -2379,6 +2396,7 @@ if ('serviceWorker' in navigator) {
           <option value="meaghan_beginner_progression">[BEG] Full Development — 5-Phase Beginner Journey (20 wk)</option>
           <option value="cathrine_endurance_pyramid">Endurance Pyramid — Cathrine 20,15,12,10 (12 wk)</option>
           <option value="thibarmy_fat_loss_emom">EMOM Fat Loss — Whole Body 3-Phase (12 wk)</option>
+          <option value="glycolytic_circuit">Glycolytic Circuit — High-Rep Metabolic 12-15 (12 wk)</option>
           <option value="max_muscle_mass_4phase">4-Phase Bodybuilding — Straight → Drop Set → Rest-Pause → DRP (16 wk)</option>
           <option value="kilo_hyp_macrocycle">Giant Set → Stage System → Triset → 7×5 Hypertrophy Macrocycle (12 wk)</option>
         </optgroup>
@@ -4567,6 +4585,26 @@ const METHOD_PRESETS={
       {name:'Intensification 1 — Heavy Pairs 5×5',sets:'5',reps:'5',intensity:'85%',rest:'120s',tempo:'2-1-1-0',weeks:3,format:'Straight Sets'},
       {name:'Accumulation 2 — Heavy/Light 6,6,12,12,6,6',sets:'6',reps:'6,6,12,12,6,6',intensity:'81%',rest:'90s',tempo:'3-1-1-0',weeks:3,format:'Heavy-Light'},
       {name:'Intensification 2 — Neural 7×3',sets:'7',reps:'3',intensity:'90%',rest:'180s',tempo:'2-1-X-0',weeks:3,format:'Neural Strength'}]},
+
+  cluster_set_method:{exerciseSet:'INT',
+    label:'[INT–ADV] Cluster Sets — 10/8/6 Intra-Set Rest (12 wk)',
+    desc:'Cluster set method from Ailsa programming. Intra-set rest periods allow heavier loads at higher rep totals. 10/8/6 descending clusters at 74% building to heavy 5/3/1 clusters. Bridges hypertrophy and maximal strength effectively.',
+    tags:['Intermediate','Advanced','Strength','Cluster Sets','12 Week'],
+    phases:[
+      {name:'Accumulation 1 — Cluster 10/8/6 Base',sets:'3',reps:'10,8,6',intensity:'74%',rest:'90s',tempo:'3-1-1-0',weeks:3,format:'Cluster Sets'},
+      {name:'Intensification 1 — Cluster 8/6/4 Load',sets:'3',reps:'8,6,4',intensity:'80%',rest:'105s',tempo:'3-1-1-0',weeks:3,format:'Cluster Sets'},
+      {name:'Accumulation 2 — Volume Cluster 10/8/6/4',sets:'4',reps:'10,8,6,4',intensity:'76%',rest:'90s',tempo:'3-1-1-0',weeks:3,format:'Cluster Sets'},
+      {name:'Intensification 2 — Heavy Cluster 5/3/1',sets:'3',reps:'5,3,1',intensity:'88%',rest:'120s',tempo:'2-1-X-0',weeks:3,format:'Cluster Peak'}]},
+
+  glycolytic_circuit:{exerciseSet:'GBC',
+    label:'[INT] Fat Loss — Glycolytic Circuit Training 12-15 (12 wk)',
+    desc:'High-rep metabolic circuit from Ailsa programming. 12-15 reps with minimal rest drives lactic acid and GH response. Tri-set and circuit formats keep heart rate elevated. Maximum caloric expenditure per session.',
+    tags:['Intermediate','Fat Loss','Metabolic','Circuit','12 Week'],
+    phases:[
+      {name:'Accumulation 1 — Circuit 3×12-15',sets:'3',reps:'12-15',intensity:'60%',rest:'30s',tempo:'3-0-1-0',weeks:3,format:'GBC Circuit'},
+      {name:'Intensification 1 — Dense Circuit 4×10-12',sets:'4',reps:'10-12',intensity:'68%',rest:'30s',tempo:'3-0-1-0',weeks:3,format:'GBC Circuit'},
+      {name:'Accumulation 2 — Triset Circuit 3×15,12,10',sets:'3',reps:'15,12,10',intensity:'65%',rest:'30s',tempo:'3-0-1-0',weeks:3,format:'Triset Circuit'},
+      {name:'Intensification 2 — Power Circuit 4×10,8,6',sets:'3',reps:'10,8,6',intensity:'74%',rest:'45s',tempo:'2-0-1-0',weeks:3,format:'Power Circuit'}]},
 
   wave_loading:{exerciseSet:'STR',
     label:'[INT–ADV] Neural Strength — Double Wave 8,6,4 / 8,6,4 (12 wk)',
@@ -8098,6 +8136,8 @@ const PHASE_NEXT={
   kilo_hyp_macrocycle:{key:'poliquin_stage_system',reason:'Macrocycle done. Stage System for advanced neural intensification.'},
   kilo_triset_acc:{key:'kilo_law_repeated_efforts',reason:'Triset volume block done. Move to 7×5 repeated effort for neural adaptation.'},
   kilo_law_repeated_efforts:{key:'advanced_strength_mesocycle',reason:'Neural base established. Advanced high-volume strength mesocycle for peak expression.'},
+  cluster_set_method:{key:'wave_loading',reason:'Cluster set base built. Progress to wave loading for full neural strength expression.'},
+  glycolytic_circuit:{key:'gbc_4x10',reason:'Circuit conditioning complete. Transition to standard GBC supersets for structured fat loss.'},
   poliquin_functional_hyp:{key:'poliquin_stage_system',reason:'Functional hypertrophy phase done. Progress to Stage System intensification.'},
   poliquin_stage_system:{key:'wave_loading',reason:'Stage System done. Wave loading for peak neural output.'},
   gbc_4x10:{key:'gbc_intermediate_progression',reason:'GBC standard complete. Advance to wave loading and neural finish.'},
@@ -9003,7 +9043,7 @@ function _parseLatestPhase(wb){
     const row=rows[ri];
     row.forEach((cell,ci)=>{
       const v=cl(cell);const vl=v.toLowerCase();
-      if((vl==='name'||vl==='client name')&&!clientName){const nv=cl(row[ci+2]||row[ci+1]||'');if(nv&&nv.length<60)clientName=nv;}
+      if((vl==='name'||vl==='client name'||vl==='client')&&!clientName){const nv=cl(row[ci+2]||row[ci+1]||'');if(nv&&nv.length<60)clientName=nv;}
       if((vl==='training method'||vl==='method')&&!method){const nv=cl(row[ci+2]||row[ci+1]||'');if(nv)method=nv;}
       // Reps from method field e.g. "4x10"
       if(!repsScheme){const m=v.match(/^(\d+x[\d,\-]+)$/);if(m)repsScheme=m[1];}
@@ -9014,7 +9054,7 @@ function _parseLatestPhase(wb){
   let dayOffsets=[];
   for(let ri=0;ri<Math.min(8,rows.length);ri++){
     const offsets=rows[ri].reduce((acc,cell,ci)=>{
-      if(cl(cell).toLowerCase()==='name'||cl(cell).toLowerCase()==='client name') acc.push(ci);
+      const _hv=cl(cell).toLowerCase(); if(_hv==='name'||_hv==='client name'||_hv==='client') acc.push(ci);
       return acc;
     },[]);
     if(offsets.length>=2){dayOffsets=offsets;break;}
@@ -9297,6 +9337,318 @@ function deleteAllClients(){
   buildStrip();buildRosterGrid('');
   showDriveToast('All clients deleted',false);
   document.getElementById('manageMenu').style.display='none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BATCH EXCEL IMPORT — Drop multiple .xlsx files, auto-match to clients
+// ═══════════════════════════════════════════════════════════════
+
+function _openBatchExcelImport(){
+  // Ensure XLSX lib is loaded
+  if(typeof XLSX==='undefined'){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>_showBatchModal();
+    s.onerror=()=>showDriveToast('Could not load Excel library — check internet',false);
+    document.head.appendChild(s);
+  } else _showBatchModal();
+}
+
+function _showBatchModal(){
+  var old=document.getElementById('batchExcelModal');
+  if(old) document.body.removeChild(old);
+
+  var ov=document.createElement('div');
+  ov.id='batchExcelModal';
+  ov.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif';
+  ov.onclick=function(e){if(e.target===ov)document.body.removeChild(ov);};
+
+  var m=document.createElement('div');
+  m.style.cssText='background:#1e1e1e;border-radius:12px;padding:28px 32px;width:620px;max-width:94vw;max-height:88vh;overflow-y:auto;box-shadow:0 24px 72px rgba(0,0,0,.5);color:#eee';
+
+  m.innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">'
+    +'<div style="font-family:Bebas Neue,sans-serif;font-size:22px;letter-spacing:3px;color:#fff">BATCH EXCEL IMPORT</div>'
+    +'<button onclick="document.body.removeChild(document.getElementById(\'batchExcelModal\'))" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer">&times;</button>'
+    +'</div>'
+    +'<div style="font-size:11px;color:#aaa;margin-bottom:16px;line-height:1.6">'
+    +'Drop multiple Excel program files at once. Each file is auto-matched to a client by <strong style="color:#c4a8ff">filename</strong> '
+    +'(e.g. <em>"Ailsa - Programs.xlsx"</em> matches client <em>Ailsa</em>) or by the <strong style="color:#c4a8ff">Client/Name header</strong> inside the spreadsheet.<br>'
+    +'The <strong>latest sheet</strong> with exercise data (A1/B1/C1 labels) is imported into the client\'s <strong>current phase</strong>.'
+    +'</div>'
+    +'<div id="batchDropZone" style="border:2px dashed #555;border-radius:10px;padding:36px 20px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px"'
+    +' ondragover="event.preventDefault();this.style.borderColor=\'#7c3aed\';this.style.background=\'rgba(124,58,237,.08)\'"'
+    +' ondragleave="this.style.borderColor=\'#555\';this.style.background=\'none\'"'
+    +' ondrop="event.preventDefault();this.style.borderColor=\'#555\';this.style.background=\'none\';_batchFilesAdded(event.dataTransfer.files)"'
+    +' onclick="document.getElementById(\'batchFileInput\').click()">'
+    +'<div style="font-size:32px;margin-bottom:8px">📂</div>'
+    +'<div style="font-size:12px;font-weight:700;color:#c4a8ff;letter-spacing:1px">DROP EXCEL FILES HERE</div>'
+    +'<div style="font-size:10px;color:#777;margin-top:4px">or click to browse — .xlsx files only</div>'
+    +'</div>'
+    +'<input type="file" id="batchFileInput" accept=".xlsx,.xls" multiple style="display:none" onchange="_batchFilesAdded(this.files);this.value=\'\'">'
+    +'<div id="batchFileList" style="margin-bottom:16px"></div>'
+    +'<div id="batchActions" style="display:none;text-align:center">'
+    +'<button id="batchRunBtn" onclick="_runBatchImport()" style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:12px 32px;border-radius:6px;background:#7c3aed;color:#fff;border:none;cursor:pointer;min-width:200px">IMPORT ALL</button>'
+    +'</div>'
+    +'<div id="batchResults" style="display:none;margin-top:16px"></div>';
+
+  ov.appendChild(m);
+  document.body.appendChild(ov);
+}
+
+var _batchFiles=[];
+
+function _batchFilesAdded(fileList){
+  for(var i=0;i<fileList.length;i++){
+    var f=fileList[i];
+    if(!f.name.match(/\.xlsx?$/i)) continue;
+    // Avoid duplicates
+    if(_batchFiles.some(function(x){return x.name===f.name&&x.size===f.size;})) continue;
+    _batchFiles.push(f);
+  }
+  _renderBatchFileList();
+}
+
+function _removeBatchFile(idx){
+  _batchFiles.splice(idx,1);
+  _renderBatchFileList();
+}
+
+function _renderBatchFileList(){
+  var el=document.getElementById('batchFileList');
+  if(!el) return;
+  if(!_batchFiles.length){
+    el.innerHTML='';
+    var act=document.getElementById('batchActions');
+    if(act) act.style.display='none';
+    return;
+  }
+
+  var html='<div style="font-size:9px;font-weight:700;letter-spacing:2px;color:#666;margin-bottom:8px;text-transform:uppercase">'+_batchFiles.length+' FILE'+ (_batchFiles.length>1?'S':'')+' QUEUED</div>';
+
+  _batchFiles.forEach(function(f,i){
+    // Guess client name from filename: "Ailsa - Programs.xlsx" → "Ailsa"
+    var guess=_guessClientFromFilename(f.name);
+    var matchCl=guess?savedClients.find(function(c){return c.name.toLowerCase().indexOf(guess.toLowerCase())>=0;}):null;
+
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:'+(matchCl?'rgba(26,107,60,.1)':'rgba(255,180,0,.08)')+';border:1px solid '+(matchCl?'rgba(26,107,60,.3)':'rgba(255,180,0,.2)')+';border-radius:6px;margin-bottom:4px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:11px;font-weight:700;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.name+'</div>'
+      +'<div style="font-size:9px;color:'+(matchCl?'#5fe89a':'#ffb74d')+';margin-top:2px">'
+      +(matchCl?'✓ Matched → <strong>'+matchCl.name+'</strong>':'⚠ No match — will try header name inside file')
+      +'</div></div>'
+      +'<button onclick="_removeBatchFile('+i+')" style="background:none;border:none;color:#666;font-size:16px;cursor:pointer;padding:2px 6px">&times;</button>'
+      +'</div>';
+  });
+
+  el.innerHTML=html;
+  var act=document.getElementById('batchActions');
+  if(act) act.style.display='block';
+}
+
+function _guessClientFromFilename(fname){
+  // Strip extension
+  var name=fname.replace(/\.\w+$/,'');
+  // Common patterns: "ClientName - Programs", "ClientName Programs", "ClientName_Programs"
+  var parts=name.split(/\s*[-–_]\s*/);
+  if(parts.length>=2){
+    // First part is usually the client name
+    return parts[0].trim();
+  }
+  // If no separator, check for "Programs" or "Phase" keyword
+  var m=name.match(/^(.+?)\s+(programs?|phase|block|training)/i);
+  if(m) return m[1].trim();
+  return name.trim();
+}
+
+function _fuzzyMatchClient(searchName){
+  if(!searchName) return null;
+  var lower=searchName.toLowerCase().trim();
+  // Exact match first
+  var exact=savedClients.find(function(c){return c.name.toLowerCase()===lower;});
+  if(exact) return exact;
+  // First-name match
+  var firstName=lower.split(/\s+/)[0];
+  if(firstName.length>=3){
+    var matches=savedClients.filter(function(c){return c.name.toLowerCase().indexOf(firstName)>=0;});
+    if(matches.length===1) return matches[0]; // unique first-name match
+  }
+  // Substring match
+  var sub=savedClients.find(function(c){return c.name.toLowerCase().indexOf(lower)>=0||lower.indexOf(c.name.toLowerCase())>=0;});
+  return sub||null;
+}
+
+async function _runBatchImport(){
+  var btn=document.getElementById('batchRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='IMPORTING...';}
+
+  var results=[];
+  var success=0,skipped=0,failed=0;
+
+  for(var fi=0;fi<_batchFiles.length;fi++){
+    var file=_batchFiles[fi];
+    var result={file:file.name,status:'',client:'',details:''};
+
+    try{
+      var data=await _readFileAsArray(file);
+      var wb=XLSX.read(new Uint8Array(data),{type:'array'});
+      var parsed=_parseLatestPhase(wb);
+
+      if(!parsed){
+        result.status='skip';result.details='No exercise data found (needs A1/B1 labels)';
+        skipped++;results.push(result);continue;
+      }
+
+      // Match client: try filename first, then header name from spreadsheet
+      var guessName=_guessClientFromFilename(file.name);
+      var client=_fuzzyMatchClient(guessName);
+      if(!client&&parsed.clientName){
+        client=_fuzzyMatchClient(parsed.clientName);
+      }
+
+      if(!client){
+        result.status='skip';
+        result.details='No matching client for "'+(guessName||parsed.clientName||'unknown')+'"';
+        skipped++;results.push(result);continue;
+      }
+
+      result.client=client.name;
+
+      // Write parsed data directly into the client object
+      _applyBatchToClient(client,parsed);
+      success++;
+      result.status='ok';
+      result.details=parsed.totalExercises+' exercises, '+parsed.days.length+' day(s) from "'+parsed.sheetName+'"';
+
+    }catch(err){
+      result.status='fail';result.details=err.message;
+      failed++;
+    }
+    results.push(result);
+
+    // Update progress
+    if(btn) btn.textContent='IMPORTING... ('+Math.round((fi+1)/_batchFiles.length*100)+'%)';
+  }
+
+  // Save all at once
+  try{safeLocalStorageSet('ept_v6',JSON.stringify(savedClients));}catch(e){}
+
+  // Refresh UI
+  if(typeof buildStrip==='function')buildStrip();
+  if(typeof buildRosterGrid==='function')buildRosterGrid('');
+
+  // Show results
+  _showBatchResults(results,success,skipped,failed);
+  _batchFiles=[];
+
+  if(btn){btn.disabled=false;btn.textContent='IMPORT ALL';}
+}
+
+function _readFileAsArray(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(e){resolve(e.target.result);};
+    reader.onerror=function(){reject(new Error('Could not read file'));};
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function _applyBatchToClient(client,parsed){
+  // Determine which phase to write to — use latest existing phase or create phase 0
+  if(!client.phases||!Array.isArray(client.phases)) client.phases=[{}];
+  var phIdx=client.phases.length-1;
+  if(!client.phaseExercises) client.phaseExercises={};
+  if(!client.phaseExercises[phIdx]) client.phaseExercises[phIdx]={};
+  if(!client.loads) client.loads={};
+
+  // Update phase metadata
+  if(parsed.method) client.phases[phIdx].name=parsed.method.substring(0,40);
+  if(parsed.repsScheme) client.phases[phIdx].reps=parsed.repsScheme;
+  if(parsed.sets) client.phases[phIdx].sets=parsed.sets;
+  if(parsed.rest) client.phases[phIdx].rest=parsed.rest;
+  if(parsed.tempo) client.phases[phIdx].tempo=parsed.tempo;
+
+  // Figure out day slots — use client's split if configured, otherwise use 0,1,2...
+  var daySlots=[];
+  if(client.split&&Array.isArray(client.split)){
+    client.split.forEach(function(s,i){if(s&&s!=='Off'&&s!=='REST') daySlots.push(i);});
+  }
+  if(!daySlots.length){
+    for(var d=0;d<parsed.days.length;d++) daySlots.push(d);
+  }
+
+  var numDays=Math.min(parsed.days.length,daySlots.length);
+
+  for(var di=0;di<numDays;di++){
+    var slot=daySlots[di];
+    var parsedDay=parsed.days[di];
+
+    // Build exercise pairs
+    var builtPairs=parsedDay.pairs.map(function(p){return{
+      pair:p.pair,
+      label:p.label,
+      exercises:p.exercises.map(function(ex){return{
+        name:ex.name,sets:ex.sets,reps:ex.reps,
+        tempoE:ex.tempoE,tempoP1:ex.tempoP1,tempoC:ex.tempoC,tempoP2:ex.tempoP2,
+        rest:ex.rest
+      };})
+    };});
+
+    client.phaseExercises[phIdx][slot]=builtPairs;
+
+    // Load week data
+    parsedDay.pairs.forEach(function(pair,pi){
+      pair.exercises.forEach(function(ex,ei){
+        if(!ex.weekLoads) return;
+        ex.weekLoads.forEach(function(setArr,weekIdx){
+          if(!setArr||!setArr.some(function(v){return v;})) return;
+          var k=slot+'_'+phIdx+'_'+weekIdx+'_'+pi+'_'+ei;
+          if(!client.loads[k]) client.loads[k]=[];
+          setArr.forEach(function(val,si){if(val) client.loads[k][si]=String(val);});
+        });
+      });
+    });
+  }
+}
+
+function _showBatchResults(results,success,skipped,failed){
+  var el=document.getElementById('batchResults');
+  if(!el) return;
+
+  var html='<div style="padding:12px 16px;border-radius:8px;margin-bottom:12px;'
+    +(failed>0?'background:rgba(201,39,31,.15);border:1px solid rgba(201,39,31,.3)'
+    :success>0?'background:rgba(26,107,60,.15);border:1px solid rgba(26,107,60,.3)'
+    :'background:rgba(255,180,0,.1);border:1px solid rgba(255,180,0,.2)')
+    +'">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">'
+    +(success>0?'✓ ':'')+'Import Complete</div>'
+    +'<div style="font-size:11px;color:#ccc">'
+    +'<span style="color:#5fe89a">'+success+' imported</span>'
+    +(skipped?' · <span style="color:#ffb74d">'+skipped+' skipped</span>':'')
+    +(failed?' · <span style="color:#ff6b63">'+failed+' failed</span>':'')
+    +'</div></div>';
+
+  results.forEach(function(r){
+    var col=r.status==='ok'?'#5fe89a':r.status==='skip'?'#ffb74d':'#ff6b63';
+    var icon=r.status==='ok'?'✓':r.status==='skip'?'—':'✗';
+    html+='<div style="display:flex;gap:8px;padding:6px 8px;border-bottom:1px solid #333;font-size:10px;align-items:flex-start">'
+      +'<span style="color:'+col+';font-weight:700;flex-shrink:0">'+icon+'</span>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.file+(r.client?' → <strong style="color:#c4a8ff">'+r.client+'</strong>':'')+'</div>'
+      +'<div style="color:#888;margin-top:1px">'+r.details+'</div>'
+      +'</div></div>';
+  });
+
+  el.innerHTML=html;
+  el.style.display='block';
+
+  // Hide the drop zone and file list
+  var dz=document.getElementById('batchDropZone');
+  if(dz) dz.style.display='none';
+  var fl=document.getElementById('batchFileList');
+  if(fl) fl.innerHTML='<div style="text-align:center;margin:12px 0"><button onclick="_batchFiles=[];_showBatchModal()" style="font-family:Syne,sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;padding:8px 20px;border-radius:5px;background:rgba(124,58,237,.2);color:#c4a8ff;border:1px solid rgba(124,58,237,.4);cursor:pointer">IMPORT MORE FILES</button></div>';
+  var act=document.getElementById('batchActions');
+  if(act) act.style.display='none';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -12378,6 +12730,8 @@ var SCHEME_RULES = [
   {key:'kilo_hyp_macrocycle',  level:['Intermediate','Advanced'],goal:['Hypertrophy / Muscle Building','Strength Development / Muscle Balance'],weeks:[12,50],priority:8,why:'ACC-INT-ACC-INT macrocycle — Giant Set, Stage System, Triset and 7×5.'},
   {key:'kilo_triset_acc',      level:['Intermediate','Advanced'],goal:['Hypertrophy / Muscle Building'],weeks:[8,40],priority:7,why:'Triset accumulation — extended time under tension, 3-exercise series.'},
   {key:'kilo_law_repeated_efforts',level:['Advanced','Elite'],   goal:['Strength Development / Muscle Balance','Athletic Performance'],weeks:[20,60],priority:7,why:'7×5 Law of Repeated Efforts — neural adaptation through consistent exposure at 80-85%.'},
+  {key:'cluster_set_method',     level:['Intermediate','Advanced'],goal:['Strength Development / Muscle Balance'],weeks:[12,52],priority:6,why:'Cluster sets — intra-set rest allows heavier loads at higher rep totals. Bridges hypertrophy and maximal strength.'},
+  {key:'glycolytic_circuit',     level:['Intermediate','Advanced'],goal:['Fat Loss / Body Composition','General Fitness / Health'],weeks:[4,30],priority:6,why:'Glycolytic circuit training — high-rep metabolic circuits maximise caloric expenditure and GH response.'},
 
   // ── POLIQUIN FUNCTIONAL HYPERTROPHY ──────────────────────────
   {key:'poliquin_functional_hyp',level:['Intermediate','Advanced'],goal:['Hypertrophy / Muscle Building','Strength Development / Muscle Balance'],weeks:[12,50],priority:8,why:'Dual-rep method — heavy 6-8 then back-off 12-15 same exercise.'},
