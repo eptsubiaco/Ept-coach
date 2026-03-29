@@ -446,7 +446,7 @@ body{background:var(--bg);color:var(--blk);font-family:'Syne',sans-serif;font-si
   .topbar{height:46px;padding:0 10px}
   .tbadge{width:50px !important;height:20px !important}
   .ttitle{font-size:12px;letter-spacing:2px}
-  .tbtn{display:none}  /* hide export buttons on phone */
+  .tbtn{font-size:8px;padding:3px 6px}  /* compact on phone but keep visible */
   .cstrip{display:none} /* hide client chips — use roster instead */
   /* Sidebar steps */
   .shead{font-size:20px}
@@ -473,6 +473,35 @@ body{background:var(--bg);color:var(--blk);font-family:'Syne',sans-serif;font-si
   .unit-btn.off{background:var(--s2);color:var(--mu2)}
   /* Tonnage chips smaller */
   .ton-chip{font-size:8px;padding:2px 6px}
+}
+
+/* ── SMALL PHONES (≤480px) ─────────────────────── */
+@media(max-width:480px){
+  .sb{padding:14px 10px 60px}
+  .shead{font-size:17px}
+  .ssub{font-size:10px}
+  .fi,.fse,.fta{font-size:12px;padding:7px 9px}
+  .fr2{grid-template-columns:1fr}
+  .pg{gap:4px}
+  .pt{font-size:9px;padding:4px 8px}
+  .navbtns{flex-wrap:wrap}
+  .btn{font-size:9px;padding:8px 12px;flex:1 1 45%}
+  .pvtab{font-size:8px;padding:6px 4px;letter-spacing:.5px}
+  .exchdr,.exrow{grid-template-columns:18px 1fr 36px 38px 44px 18px;gap:2px}
+  .ei{font-size:10px;padding:3px 4px}
+  .splitrow{grid-template-columns:40px 1fr 100px}
+  .sb-ratio-card{padding:12px 14px}
+  .sb-ratio-name{font-size:11px}
+  .sb-ratio-val{font-size:18px}
+}
+
+/* ── TABLETS (≤768px) ─────────────────────── */
+@media(max-width:768px){
+  .layout{grid-template-columns:1fr}
+  .pv{padding:14px 12px 50px}
+  .pvtab{font-size:9px;padding:8px 6px}
+  .roster-grid{grid-template-columns:1fr 1fr}
+  .sb-grid{grid-template-columns:1fr}
 }
 
 /* ── TOUCH: larger tap targets universally ─────────────────────── */
@@ -1362,8 +1391,11 @@ async function _launchClientPortal(user, staff) {
   }
 
   var cl = clientDoc;
-  var firstName = cl.clientFirstName || 'Athlete';
-  var lastName = cl.clientLastName || '';
+  // v6 stores full name in cl.name, not clientFirstName/clientLastName
+  var _fullName = cl.name || ((cl.clientFirstName || '') + ' ' + (cl.clientLastName || '')).trim() || 'Athlete';
+  var _nameParts = _fullName.split(' ');
+  var firstName = _nameParts[0] || 'Athlete';
+  var lastName = _nameParts.slice(1).join(' ') || '';
 
   // Build the portal UI
   document.body.innerHTML = '';
@@ -1649,7 +1681,7 @@ window._eptPopulateClientLink = function() {
   sel.innerHTML = '<option value="">(Select a client to link)</option>';
   clients.forEach(function(c) {
     if (c && c.id) {
-      var label = (c.clientFirstName || '') + ' ' + (c.clientLastName || '') + ' (' + c.id + ')';
+      var label = (c.name || ((c.clientFirstName || '') + ' ' + (c.clientLastName || '')).trim() || 'Unnamed') + ' (' + c.id + ')';
       sel.innerHTML += '<option value="' + c.id + '">' + label.trim() + '</option>';
     }
   });
@@ -14829,21 +14861,27 @@ function sstAutoFillBW(cl){
   } else if(cl&&cl.clientAge){
     // Leave blank — only fill from actual data
   }
-  // Auto-fill gender
+  // Auto-fill gender — check clientGender, then bsSex, then name-based guess
   var genderEl=document.getElementById('sst-gender');
   if(genderEl&&cl){
-    var g=(cl.clientGender||'').toLowerCase();
+    var g=(cl.clientGender||cl.bsSex||'').toLowerCase();
     if(g==='female'||g==='f')genderEl.value='female';
-    else genderEl.value='male';
+    else if(g==='male'||g==='m')genderEl.value='male';
+    // If still no gender data, leave as default (male) — coach should set it
   }
-  // Auto-fill age bracket from client age
+  // Auto-fill age bracket — check clientAge, then bsAge
   var ageEl=document.getElementById('sst-age');
-  if(ageEl&&cl&&cl.clientAge){
-    var age=parseInt(cl.clientAge);
+  var _clientAge = cl ? (cl.clientAge || cl.bsAge || '') : '';
+  if(ageEl&&_clientAge){
+    var age=parseInt(_clientAge);
     if(age>=20&&age<30)ageEl.value='20-30';
     else if(age>=30&&age<40)ageEl.value='30-40';
     else if(age>=40&&age<50)ageEl.value='40-50';
     else if(age>=50)ageEl.value='50+';
+  }
+  // Auto-fill bodyweight from bsBodyweight if weightLog is empty
+  if(bwEl&&!bwEl.value&&cl&&cl.bsBodyweight){
+    bwEl.value=cl.bsBodyweight;
   }
   // Also auto-fill from last SST history if available
   if(cl&&cl.sstHistory&&cl.sstHistory.length){
