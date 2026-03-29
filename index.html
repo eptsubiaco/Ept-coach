@@ -1525,13 +1525,12 @@ async function _launchClientPortal(user, staff) {
   }
 
   var cl = clientDoc;
-  // v6 stores full name in cl.name, not clientFirstName/clientLastName
   var _fullName = cl.name || ((cl.clientFirstName || '') + ' ' + (cl.clientLastName || '')).trim() || 'Athlete';
   var _nameParts = _fullName.split(' ');
   var firstName = _nameParts[0] || 'Athlete';
   var lastName = _nameParts.slice(1).join(' ') || '';
 
-  // Build the portal UI
+  // Build the portal UI — FULLY READ-ONLY (no edit buttons anywhere)
   document.body.innerHTML = '';
   document.body.style.background = '#f2efe9';
 
@@ -1549,38 +1548,61 @@ async function _launchClientPortal(user, staff) {
   // Welcome section
   var welcomeHtml = '<div style="margin-bottom:28px"><div style="font-family:Bebas Neue,sans-serif;font-size:28px;letter-spacing:2px;color:#1a1714">Welcome, ' + firstName + '</div><div style="font-size:12px;color:#8a857c;margin-top:4px">Your training portal — view your program, track sessions &amp; see progress.</div></div>';
 
-  // ---- Current Program Card ----
+  // ---- Current Program Card (reads BOTH phaseExercises v6 format AND program.phases format) ----
   var programHtml = '<div style="background:#fff;border:1px solid #e2ddd5;border-radius:10px;padding:20px;margin-bottom:20px">';
   programHtml += '<div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8a857c;margin-bottom:12px">CURRENT PROGRAM</div>';
 
-  if (cl.program && cl.program.phases && cl.program.phases.length > 0) {
-    var method = cl.methodPreset || cl.method || '';
-    programHtml += '<div style="font-size:13px;font-weight:700;color:#1a1714;margin-bottom:4px">' + (method || 'Custom Program') + '</div>';
-    programHtml += '<div style="font-size:11px;color:#8a857c;margin-bottom:16px">' + cl.program.phases.length + ' phase(s) \u2022 ' + (cl.sessionsPerWeek || cl.program.daysPerWeek || '?') + ' sessions/week</div>';
+  var _hasProgram = false;
+  var method = cl.methodPreset || cl.method || cl.clientGoal || '';
 
-    // Show current phase exercises
-    var phases = cl.program.phases;
-    for (var pi = 0; pi < phases.length; pi++) {
-      var phase = phases[pi];
+  // ---- v6 format: phaseExercises keyed by phaseIndex → dayIndex → exercises ----
+  if (cl.phaseExercises && Object.keys(cl.phaseExercises).length > 0) {
+    _hasProgram = true;
+    var phaseKeys = Object.keys(cl.phaseExercises).sort();
+    programHtml += '<div style="font-size:13px;font-weight:700;color:#1a1714;margin-bottom:4px">' + (method || 'Training Program') + '</div>';
+    programHtml += '<div style="font-size:11px;color:#8a857c;margin-bottom:16px">' + phaseKeys.length + ' phase(s) \u2022 ' + (cl.sessionsPerWeek || '?') + ' sessions/week</div>';
+
+    for (var pk = 0; pk < phaseKeys.length; pk++) {
+      var phaseData = cl.phaseExercises[phaseKeys[pk]];
       programHtml += '<div style="background:#f7f4ef;border:1px solid #e2ddd5;border-radius:8px;padding:14px;margin-bottom:10px">';
-      programHtml += '<div style="font-size:11px;font-weight:700;color:#C9271F;margin-bottom:8px">Phase ' + (pi+1) + (phase.name ? ' \u2014 ' + phase.name : '') + '</div>';
+      programHtml += '<div style="font-size:11px;font-weight:700;color:#C9271F;margin-bottom:8px">Phase ' + (Number(phaseKeys[pk])+1) + '</div>';
 
-      if (phase.days) {
-        for (var di = 0; di < phase.days.length; di++) {
-          var day = phase.days[di];
-          if (!day || !day.pairs) continue;
-          programHtml += '<div style="font-size:10px;font-weight:700;color:#2563a8;margin:8px 0 4px">Day ' + (di+1) + (day.label ? ' \u2014 ' + day.label : '') + '</div>';
-          for (var pj = 0; pj < day.pairs.length; pj++) {
-            var pair = day.pairs[pj];
-            if (!pair || !pair.exercises) continue;
-            programHtml += '<div style="margin-left:12px;margin-bottom:4px">';
-            for (var ei = 0; ei < pair.exercises.length; ei++) {
-              var ex = pair.exercises[ei];
-              if (!ex || !ex.name) continue;
-              var exLine = '<span style="font-size:10px;font-weight:700;color:#C9271F">' + String.fromCharCode(65 + pj) + (ei+1) + '</span> ';
-              exLine += '<span style="font-size:11px;color:#1a1714">' + ex.name + '</span>';
-              if (ex.sets) exLine += ' <span style="font-size:10px;color:#8a857c">' + ex.sets + '\u00d7' + (ex.reps||'') + '</span>';
-              if (ex.tempo) exLine += ' <span style="font-size:10px;color:#7c3aed;font-family:DM Mono,monospace">' + ex.tempo + '</span>';
+      if (phaseData && typeof phaseData === 'object') {
+        var dayKeys = Object.keys(phaseData).sort();
+        for (var dk = 0; dk < dayKeys.length; dk++) {
+          var dayData = phaseData[dayKeys[dk]];
+          if (!dayData || (Array.isArray(dayData) && dayData.length === 0)) continue;
+          programHtml += '<div style="font-size:10px;font-weight:700;color:#2563a8;margin:8px 0 4px">Day ' + (Number(dayKeys[dk])+1) + '</div>';
+
+          var exercises = Array.isArray(dayData) ? dayData : [];
+          // Group by pair letter
+          var pairGroups = {};
+          for (var exi = 0; exi < exercises.length; exi++) {
+            var ex = exercises[exi];
+            if (!ex || !ex.name) continue;
+            var pairKey = ex.pair || 'Z';
+            if (!pairGroups[pairKey]) pairGroups[pairKey] = [];
+            pairGroups[pairKey].push(ex);
+          }
+
+          var pairLetters = Object.keys(pairGroups).sort();
+          for (var pli = 0; pli < pairLetters.length; pli++) {
+            var pairExs = pairGroups[pairLetters[pli]];
+            programHtml += '<div style="margin-left:12px;margin-bottom:6px">';
+            for (var pei = 0; pei < pairExs.length; pei++) {
+              var pex = pairExs[pei];
+              var exLine = '<span style="font-size:10px;font-weight:700;color:#C9271F">' + pairLetters[pli] + (pei+1) + '</span> ';
+              exLine += '<span style="font-size:11px;color:#1a1714">' + pex.name + '</span>';
+              if (pex.sets) exLine += ' <span style="font-size:10px;color:#8a857c">' + pex.sets + '\u00d7' + (pex.reps||'') + '</span>';
+              // Build tempo string from components or use tempo field
+              var tempoStr = '';
+              if (pex.tempoE || pex.tempoP1 || pex.tempoC || pex.tempoP2) {
+                tempoStr = (pex.tempoE||'0') + '' + (pex.tempoP1||'0') + '' + (pex.tempoC||'0') + '' + (pex.tempoP2||'0');
+              } else if (pex.tempo) {
+                tempoStr = pex.tempo;
+              }
+              if (tempoStr && tempoStr !== '0000') exLine += ' <span style="font-size:10px;color:#7c3aed;font-family:DM Mono,monospace">' + tempoStr + '</span>';
+              if (pex.rest) exLine += ' <span style="font-size:9px;color:#b8b2a9">R:' + pex.rest + 's</span>';
               programHtml += '<div style="padding:2px 0">' + exLine + '</div>';
             }
             programHtml += '</div>';
@@ -1589,15 +1611,47 @@ async function _launchClientPortal(user, staff) {
       }
       programHtml += '</div>';
     }
-  } else {
+
+  // ---- Legacy format: program.phases ----
+  } else if (cl.program && cl.program.phases && cl.program.phases.length > 0) {
+    _hasProgram = true;
+    programHtml += '<div style="font-size:13px;font-weight:700;color:#1a1714;margin-bottom:4px">' + (method || 'Custom Program') + '</div>';
+    programHtml += '<div style="font-size:11px;color:#8a857c;margin-bottom:16px">' + cl.program.phases.length + ' phase(s) \u2022 ' + (cl.sessionsPerWeek || cl.program.daysPerWeek || '?') + ' sessions/week</div>';
+    var phases = cl.program.phases;
+    for (var pi = 0; pi < phases.length; pi++) {
+      var phase = phases[pi];
+      programHtml += '<div style="background:#f7f4ef;border:1px solid #e2ddd5;border-radius:8px;padding:14px;margin-bottom:10px">';
+      programHtml += '<div style="font-size:11px;font-weight:700;color:#C9271F;margin-bottom:8px">Phase ' + (pi+1) + (phase.name ? ' \u2014 ' + phase.name : '') + '</div>';
+      if (phase.days) {
+        for (var di = 0; di < phase.days.length; di++) {
+          var day = phase.days[di];
+          if (!day || !day.pairs) continue;
+          programHtml += '<div style="font-size:10px;font-weight:700;color:#2563a8;margin:8px 0 4px">Day ' + (di+1) + '</div>';
+          for (var pj = 0; pj < day.pairs.length; pj++) {
+            var pair = day.pairs[pj];
+            if (!pair || !pair.exercises) continue;
+            programHtml += '<div style="margin-left:12px;margin-bottom:4px">';
+            for (var ei = 0; ei < pair.exercises.length; ei++) {
+              var ex = pair.exercises[ei];
+              if (!ex || !ex.name) continue;
+              programHtml += '<div style="padding:2px 0"><span style="font-size:10px;font-weight:700;color:#C9271F">' + String.fromCharCode(65+pj) + (ei+1) + '</span> <span style="font-size:11px;color:#1a1714">' + ex.name + '</span>' + (ex.sets ? ' <span style="font-size:10px;color:#8a857c">' + ex.sets + '\u00d7' + (ex.reps||'') + '</span>' : '') + (ex.tempo ? ' <span style="font-size:10px;color:#7c3aed;font-family:DM Mono,monospace">' + ex.tempo + '</span>' : '') + '</div>';
+            }
+            programHtml += '</div>';
+          }
+        }
+      }
+      programHtml += '</div>';
+    }
+  }
+
+  if (!_hasProgram) {
     programHtml += '<div style="font-size:12px;color:#b8b2a9;font-style:italic">No program assigned yet. Your coach will build your program soon.</div>';
   }
   programHtml += '</div>';
 
-  // ---- Session History Card ----
+  // ---- Session History Card (read-only) ----
   var sessionsHtml = '<div style="background:#fff;border:1px solid #e2ddd5;border-radius:10px;padding:20px;margin-bottom:20px">';
   sessionsHtml += '<div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8a857c;margin-bottom:12px">SESSION HISTORY</div>';
-
   if (cl.sessions && cl.sessions.length > 0) {
     var recentSessions = cl.sessions.slice(-10).reverse();
     for (var si = 0; si < recentSessions.length; si++) {
@@ -1614,7 +1668,7 @@ async function _launchClientPortal(user, staff) {
   }
   sessionsHtml += '</div>';
 
-  // ---- Coach Notes Card ----
+  // ---- Coach Notes Card (read-only) ----
   var notesHtml = '<div style="background:#fff;border:1px solid #e2ddd5;border-radius:10px;padding:20px;margin-bottom:20px">';
   notesHtml += '<div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8a857c;margin-bottom:12px">COACH NOTES</div>';
   if (cl.coachNotes || cl.notes) {
@@ -1624,21 +1678,17 @@ async function _launchClientPortal(user, staff) {
   }
   notesHtml += '</div>';
 
-  // ---- Client Info Card ----
+  // ---- Your Info Card (read-only, NO edit capabilities) ----
   var infoHtml = '<div style="background:#fff;border:1px solid #e2ddd5;border-radius:10px;padding:20px">';
-  infoHtml += '<div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8a857c;margin-bottom:12px">YOUR DETAILS</div>';
+  infoHtml += '<div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8a857c;margin-bottom:12px">YOUR INFO</div>';
   var details = [];
-  if (cl.clientGoal) details.push('<b>Goal:</b> ' + cl.clientGoal);
-  if (cl.clientAge) details.push('<b>Age:</b> ' + cl.clientAge);
-  if (cl.clientWeight) details.push('<b>Weight:</b> ' + cl.clientWeight + 'kg');
-  if (cl.sessionsPerWeek) details.push('<b>Sessions/week:</b> ' + cl.sessionsPerWeek);
-  if (cl.trainingAge) details.push('<b>Training age:</b> ' + cl.trainingAge);
+  if (cl.clientGoal) details.push(['Goal', cl.clientGoal]);
+  if (cl.sessionsPerWeek) details.push(['Sessions/week', cl.sessionsPerWeek]);
+  if (cl.trainingAge) details.push(['Training age', cl.trainingAge]);
   if (details.length > 0) {
-    infoHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
     for (var di = 0; di < details.length; di++) {
-      infoHtml += '<div style="font-size:11px;color:#1a1714;padding:6px 0;border-bottom:1px solid #f2efe9">' + details[di] + '</div>';
+      infoHtml += '<div style="font-size:11px;color:#1a1714;padding:8px 0;border-bottom:1px solid #f2efe9"><span style="color:#8a857c">' + details[di][0] + ':</span> ' + details[di][1] + '</div>';
     }
-    infoHtml += '</div>';
   } else {
     infoHtml += '<div style="font-size:12px;color:#b8b2a9;font-style:italic">Details will appear once your coach enters them.</div>';
   }
@@ -1647,11 +1697,12 @@ async function _launchClientPortal(user, staff) {
   container.innerHTML = welcomeHtml + programHtml + sessionsHtml + notesHtml + infoHtml;
   document.body.appendChild(container);
 
-  // ---- Real-time listener for this specific client doc ----
+  // ---- Real-time listener for this specific client doc (auto-refresh portal) ----
   onSnapshot(doc(_fbDb, 'gyms', _gymId, 'clients', clientId), function(snap) {
     if (snap.exists()) {
-      console.log('[EPT Portal] Client data updated');
-      // Could refresh the portal here — for now just log
+      console.log('[EPT Portal] Client data updated — refreshing');
+      // Re-launch portal with fresh data
+      _launchClientPortal(user, staff);
     }
   });
 }
