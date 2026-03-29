@@ -1051,50 +1051,89 @@ if (_firebaseReady) {
   onAuthStateChanged(_fbAuth, async (user) => {
     if (user) {
       try {
-        const userDoc = await getDoc(doc(_fbDb, 'users', user.uid));
-        if (userDoc.exists()) {
-          _gymId = userDoc.data().gymId;
+        // ---- Check for pending invite (always, even if user doc exists) ----
+        var _pendingInvite = null;
+        try {
+          var _invDoc = await getDoc(doc(_fbDb, 'invites', user.email.toLowerCase()));
+          if (_invDoc.exists() && _invDoc.data().status === 'pending') {
+            _pendingInvite = _invDoc.data();
+            console.log('[EPT] Found pending invite for', user.email, '→ gym', _pendingInvite.gymId, 'role', _pendingInvite.role);
+          }
+        } catch(_ie) { console.warn('[EPT] Invite check skipped:', _ie.message); }
+
+        // ---- If invite exists, join that gym (overrides any previous gym) ----
+        if (_pendingInvite && _pendingInvite.gymId) {
+          _gymId = _pendingInvite.gymId;
           window._gymId = _gymId;
-          const staffDoc = await getDoc(doc(_fbDb, 'gyms', _gymId, 'staff', user.uid));
-          _currentStaff = staffDoc.exists() ? staffDoc.data() : { role: 'trainer' };
+          var _invName = _pendingInvite.name || user.displayName || user.email.split('@')[0];
+          var _invRole = _pendingInvite.role || 'trainer';
+          var _invLinkedClientId = _pendingInvite.linkedClientId || '';
+
+          // Create/update staff doc in the invited gym
+          var _staffData = { name: _invName, email: user.email, role: _invRole, createdAt: serverTimestamp(), assignedClients: [] };
+          if (_invLinkedClientId) _staffData.linkedClientId = _invLinkedClientId;
+          await setDoc(doc(_fbDb, 'gyms', _gymId, 'staff', user.uid), _staffData, { merge: true });
+
+          // Update user doc to point to invited gym
+          await setDoc(doc(_fbDb, 'users', user.uid), { displayName: _invName, email: user.email, gymId: _gymId, role: _invRole, createdAt: serverTimestamp() }, { merge: true });
+
+          // Mark invite as accepted
+          try { await setDoc(doc(_fbDb, 'invites', user.email.toLowerCase()), { status: 'accepted', acceptedAt: serverTimestamp(), uid: user.uid }, { merge: true }); } catch(_ae) {}
+          try { await setDoc(doc(_fbDb, 'gyms', _gymId, 'invites', user.email.toLowerCase()), { status: 'accepted', acceptedAt: serverTimestamp(), uid: user.uid }, { merge: true }); } catch(_ae) {}
+
+          _currentStaff = { role: _invRole, name: _invName, email: user.email };
+          if (_invLinkedClientId) _currentStaff.linkedClientId = _invLinkedClientId;
           window._currentStaff = _currentStaff;
-          window._currentUser = { uid: user.uid, email: user.email, displayName: user.displayName };
+          window._currentUser = { uid: user.uid, email: user.email, displayName: _invName };
 
-          // Check for migration
-          await _checkMigration();
+          console.log('[EPT] Invite accepted:', _invName, 'joined as', _invRole);
 
-          // Start real-time sync (only for coaches; clients get portal sync below)
           if (_currentStaff.role !== 'client') {
             _startSync();
           }
-
-          // Inject user badge into topbar
           _patchTopbar(user, _currentStaff);
-
           hideAuth();
 
-          // === CLIENT PORTAL MODE ===
           if (_currentStaff.role === 'client') {
             _launchClientPortal(user, _currentStaff);
-            return; // Don't continue to coach app
+            return;
           }
+
+        // ---- No invite: use existing user doc ----
         } else {
-          // User auth exists but no gym data — auto-create gym (partial signup recovery)
-          console.warn('[EPT] User doc missing — creating gym data for', user.email);
-          var autoGymId = 'ept-subiaco_' + Date.now();
-          var autoName = user.displayName || user.email.split('@')[0] || 'Coach';
-          await setDoc(doc(_fbDb, 'gyms', autoGymId), { name: 'EPT Subiaco', createdAt: serverTimestamp(), ownerId: user.uid, plan: 'free' });
-          await setDoc(doc(_fbDb, 'gyms', autoGymId, 'staff', user.uid), { name: autoName, email: user.email, role: 'owner', createdAt: serverTimestamp(), assignedClients: [] });
-          await setDoc(doc(_fbDb, 'users', user.uid), { displayName: autoName, email: user.email, gymId: autoGymId, role: 'owner', createdAt: serverTimestamp() });
-          _gymId = autoGymId;
-          window._gymId = _gymId;
-          _currentStaff = { role: 'owner', name: autoName };
-          window._currentStaff = _currentStaff;
-          window._currentUser = { uid: user.uid, email: user.email, displayName: autoName };
-          await _checkMigration();
-          _startSync();
-          _patchTopbar(user, _currentStaff);
-          hideAuth();
+          const userDoc = await getDoc(doc(_fbDb, 'users', user.uid));
+          if (userDoc.exists()) {
+            _gymId = userDoc.data().gymId;
+            window._gymId = _gymId;
+            const staffDoc = await getDoc(doc(_fbDb, 'gyms', _gymId, 'staff', user.uid));
+            _currentStaff = staffDoc.exists() ? staffDoc.data() : { role: 'trainer' };
+            window._currentStaff = _currentStaff;
+            window._currentUser = { uid: user.uid, email: user.email, displayName: user.displayName };
+
+            // Check for migration
+            await _checkMigration();
+
+            // Start real-time sync (only for coaches; clients get portal sync below)
+            if (_currentStaff.role !== 'client') {
+              _startSync();
+            }
+
+            // Inject user badge into topbar
+            _patchTopbar(user, _currentStaff);
+
+            hideAuth();
+
+            // === CLIENT PORTAL MODE ===
+            if (_currentStaff.role === 'client') {
+              _launchClientPortal(user, _currentStaff);
+              return; // Don't continue to coach app
+            }
+          } else {
+            // No user doc AND no invite — show access denied
+            console.warn('[EPT] No invite and no user doc for', user.email);
+            document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Syne,sans-serif;text-align:center;padding:20px"><div><div style="font-size:48px;margin-bottom:16px">&#128683;</div><div style="font-size:18px;font-weight:700;color:#1a1714;margin-bottom:8px">Access Not Granted</div><div style="font-size:13px;color:#888;max-width:400px;line-height:1.6">You don\'t have an invitation to EPT Studio. Please contact your coach or manager to get an invite.</div><button onclick="window._eptSignOut()" style="margin-top:20px;background:#C9271F;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer">SIGN OUT</button></div></div>';
+            return;
+          }
         }
       } catch(e) {
         console.error('[EPT] Auth state error:', e);
